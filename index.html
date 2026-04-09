@@ -19,20 +19,9 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
 
-  #setup { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
-  .setup-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 420px; }
-  .setup-card h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
-  .setup-card p { color: var(--text2); font-size: 13px; margin-bottom: 2rem; }
-  .hint { font-size: 11px; color: var(--text2); margin-top: 6px; }
-  .config-link { color: var(--accent); cursor: pointer; font-size: 12px; display: inline-block; }
-  #fb-box { display: none; margin-top: 0.75rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2); padding: 1rem; }
-  #fb-box textarea { width: 100%; background: var(--bg); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r2); padding: 0.6rem; font-size: 12px; font-family: monospace; height: 130px; outline: none; resize: vertical; }
-  .btn-cfg { margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--bg2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r2); font-size: 12px; cursor: pointer; }
-  .btn-cfg:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-enter { margin-top: 1.75rem; width: 100%; padding: 0.8rem; background: var(--accent); color: #fff; border: none; border-radius: var(--r2); font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
-  .btn-enter:hover { opacity: .88; }
+  #setup { display: none; }
 
-  #app { display: none; flex-direction: column; min-height: 100vh; }
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
 
   header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 1rem; position: sticky; top: 0; z-index: 100; }
   .logo { font-weight: 700; font-size: 1rem; }
@@ -127,20 +116,7 @@
 </head>
 <body>
 
-<div id="setup">
-  <div class="setup-card">
-    <h1>Inventario de Fichas</h1>
-    <p>AVIAM · Punta Cana International Airport</p>
-    <span class="config-link" onclick="toggleCfg()">⚙ Configurar Firebase</span>
-    <div id="fb-box">
-      <p class="hint" style="margin-bottom:.5rem;">Pega las líneas de tu <b>firebaseConfig</b>:</p>
-      <textarea id="inp-cfg" placeholder='apiKey: "...",&#10;authDomain: "...",&#10;projectId: "...",&#10;storageBucket: "...",&#10;messagingSenderId: "...",&#10;appId: "..."'></textarea>
-      <button class="btn-cfg" onclick="saveCfg()">Guardar configuración</button>
-    </div>
-    <button class="btn-enter" onclick="startApp()">Abrir inventario →</button>
-    <p class="hint" style="margin-top:.75rem;">Ambas personas abren esta página y los registros se sincronizan en tiempo real.</p>
-  </div>
-</div>
+<div id="setup"></div>
 
 <div id="app">
   <header>
@@ -201,38 +177,22 @@
 let db=null, unsub=null, records=[], activeFilt='TODOS';
 const COL='inventario_fichas';
 
-function getCfg(){try{return JSON.parse(localStorage.getItem('fb_cfg')||'null')}catch{return null}}
+const FB_CFG = {
+  apiKey: "AIzaSyBW40Lo6R2p4L-Aq0pZrKrPYpxXjg7p8Co",
+  authDomain: "vagones-inventario.firebaseapp.com",
+  projectId: "vagones-inventario",
+  storageBucket: "vagones-inventario.firebasestorage.app",
+  messagingSenderId: "992932665061",
+  appId: "1:992932665061:web:032e344656cd2ffda3260c"
+};
 
-function toggleCfg(){
-  const b=document.getElementById('fb-box');
-  b.style.display=b.style.display==='none'?'block':'none';
-  const c=getCfg();
-  if(c) document.getElementById('inp-cfg').value=Object.entries(c).map(([k,v])=>`${k}: "${v}"`).join(',\n');
-}
-
-function saveCfg(){
-  const raw=document.getElementById('inp-cfg').value.trim();
-  try{
-    const obj={};
-    raw.split('\n').forEach(l=>{const m=l.match(/^\s*(\w+)\s*:\s*["']?([^"',\n]+?)["']?,?\s*$/);if(m)obj[m[1].trim()]=m[2].trim();});
-    if(!obj.apiKey||!obj.projectId)throw new Error('Faltan campos');
-    localStorage.setItem('fb_cfg',JSON.stringify(obj));
-    toast('Configuración guardada','ok');
-    document.getElementById('fb-box').style.display='none';
-  }catch(e){toast('Error: '+e.message,'err');}
-}
-
-function startApp(){
-  const cfg=getCfg();
-  if(!cfg){toast('Primero configura Firebase','err');toggleCfg();return;}
-  try{
-    if(!firebase.apps.length)firebase.initializeApp(cfg);
-    db=firebase.firestore();
-    document.getElementById('setup').style.display='none';
-    document.getElementById('app').style.display='flex';
+window.addEventListener('load', () => {
+  try {
+    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
+    db = firebase.firestore();
     listen();
-  }catch(e){toast('Error Firebase: '+e.message,'err');}
-}
+  } catch(e) { toast('Error Firebase: '+e.message,'err'); }
+});
 
 function listen(){
   if(unsub)unsub();
