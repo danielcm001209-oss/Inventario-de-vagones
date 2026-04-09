@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario de Fichas – PUJ</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --bg2: #1a1d27; --bg3: #22263a;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #e8eaf0; --text2: #8b90a8;
+    --accent: #4f7cff; --green: #22c55e; --amber: #f59e0b; --red: #ef4444;
+    --teal: #14b8a6; --purple: #c084fc;
+    --r: 10px; --r2: 6px; --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+
+  #setup { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
+  .setup-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 420px; }
+  .setup-card h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .setup-card p { color: var(--text2); font-size: 13px; margin-bottom: 2rem; }
+  .hint { font-size: 11px; color: var(--text2); margin-top: 6px; }
+  .config-link { color: var(--accent); cursor: pointer; font-size: 12px; display: inline-block; }
+  #fb-box { display: none; margin-top: 0.75rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2); padding: 1rem; }
+  #fb-box textarea { width: 100%; background: var(--bg); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r2); padding: 0.6rem; font-size: 12px; font-family: monospace; height: 130px; outline: none; resize: vertical; }
+  .btn-cfg { margin-top: 0.5rem; padding: 0.5rem 1rem; background: var(--bg2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r2); font-size: 12px; cursor: pointer; }
+  .btn-cfg:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-enter { margin-top: 1.75rem; width: 100%; padding: 0.8rem; background: var(--accent); color: #fff; border: none; border-radius: var(--r2); font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  .btn-enter:hover { opacity: .88; }
+
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 1rem; position: sticky; top: 0; z-index: 100; }
+  .logo { font-weight: 700; font-size: 1rem; }
+  .logo span { color: var(--accent); }
+  .live { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--green); background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.2); border-radius: 20px; padding: 3px 10px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .hdr-r { margin-left: auto; display: flex; gap: 0.5rem; }
+  .btn-h { padding: 0.38rem 0.9rem; border: 1px solid var(--border2); border-radius: var(--r2); background: var(--bg3); color: var(--text); font-size: 13px; cursor: pointer; transition: all .15s; }
+  .btn-h:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-exp { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-exp:hover { background: #16a34a; border-color: #16a34a; color: #fff; }
+
+  .stats { display: grid; grid-template-columns: repeat(5,1fr); border-bottom: 1px solid var(--border); background: var(--border); gap: 1px; }
+  .stat { background: var(--bg2); padding: .9rem 1.25rem; }
+  .stat .v { font-size: 1.6rem; font-weight: 700; line-height: 1; display: block; }
+  .stat .l { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; }
+
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  .entry { width: 260px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+  .entry h2 { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .07em; }
+
+  .big-inp { width: 100%; background: var(--bg3); border: 2px solid var(--border2); color: var(--text); border-radius: var(--r2); padding: .75rem 1rem; font-size: 1.3rem; font-weight: 700; font-family: monospace; outline: none; text-transform: uppercase; letter-spacing: .05em; transition: border-color .15s; }
+  .big-inp:focus { border-color: var(--accent); }
+  .big-inp.dup { border-color: var(--red); }
+
+  .fam-pill { border-radius: var(--r2); padding: .6rem .85rem; font-size: 13px; font-weight: 600; text-align: center; border: 1px solid var(--border2); color: var(--text2); background: var(--bg3); transition: all .2s; }
+  .fam-pill.fBC   { background: rgba(79,124,255,.15); border-color: var(--accent); color: #7fa5ff; }
+  .fam-pill.fBCB  { background: rgba(20,184,166,.15); border-color: var(--teal);   color: var(--teal); }
+  .fam-pill.fBCTB { background: rgba(245,158,11,.15); border-color: var(--amber);  color: var(--amber); }
+  .fam-pill.fVBIP { background: rgba(192,132,252,.15); border-color: var(--purple); color: var(--purple); }
+  .fam-pill.fNONE { background: rgba(239,68,68,.1); border-color: var(--red); color: var(--red); }
+
+  .dup-warn { font-size: 11px; color: var(--red); text-align: center; display: none; }
+
+  .btn-reg { width: 100%; padding: .75rem; background: var(--accent); color: #fff; border: none; border-radius: var(--r2); font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+  .btn-reg:hover { opacity: .88; }
+  .btn-reg:disabled { background: var(--bg3); color: var(--text2); cursor: not-allowed; }
+
+  .rec-list { display: flex; flex-direction: column; gap: 5px; }
+  .rec { display: flex; align-items: center; gap: 8px; background: var(--bg3); border-radius: var(--r2); padding: .4rem .6rem; font-size: 12px; }
+  .rec .rc { font-family: monospace; font-weight: 700; font-size: 13px; flex: 1; }
+  .btn-dx { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 13px; padding: 0 2px; transition: color .15s; }
+  .btn-dx:hover { color: var(--red); }
+
+  .tbl-area { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+
+  .filters { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  .filters input { background: var(--bg2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--r2); padding: .42rem .75rem; font-size: 13px; outline: none; width: 180px; }
+  .filters input:focus { border-color: var(--accent); }
+  .filt { padding: .42rem .85rem; border: 1px solid var(--border2); border-radius: var(--r2); background: var(--bg2); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .filt.on { border-color: var(--accent); color: #7fa5ff; background: var(--bg3); }
+
+  .tbl-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .tbl-hd { padding: .65rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: .5rem; }
+  .tbl-hd h3 { font-size: 13px; font-weight: 600; }
+  .cnt { background: var(--bg3); color: var(--text2); border-radius: 20px; font-size: 11px; padding: 2px 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: .55rem 1rem; font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; font-weight: 500; border-bottom: 1px solid var(--border); background: var(--bg3); }
+  td { padding: .5rem 1rem; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+  .tdf { font-family: monospace; font-weight: 700; font-size: 14px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; }
+  .tBC   { background: rgba(79,124,255,.2);  color: #7fa5ff; }
+  .tBCB  { background: rgba(20,184,166,.2);  color: var(--teal); }
+  .tBCTB { background: rgba(245,158,11,.2);  color: var(--amber); }
+  .tVBIP { background: rgba(192,132,252,.2); color: var(--purple); }
+  .td2 { color: var(--text2); font-size: 11px; }
+  .btn-del { padding: 2px 7px; background: transparent; border: 1px solid var(--border2); color: var(--text2); border-radius: 4px; cursor: pointer; font-size: 11px; transition: all .15s; }
+  .btn-del:hover { border-color: var(--red); color: var(--red); }
+
+  .empty { text-align: center; padding: 3rem; color: var(--text2); }
+  .empty b { display: block; color: var(--text); font-size: 1rem; margin-bottom: .35rem; }
+
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r2); padding: .7rem 1.2rem; font-size: 13px; font-weight: 500; z-index: 9999; transform: translateY(80px); opacity: 0; transition: all .25s; max-width: 300px; }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.ok  { border-color: var(--green); color: var(--green); }
+  #toast.err { border-color: var(--red);   color: var(--red); }
+  #toast.inf { border-color: var(--accent); color: #7fa5ff; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  @media (max-width: 700px) {
+    .stats { grid-template-columns: repeat(3,1fr); }
+    .entry { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+    .body { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="setup-card">
+    <h1>Inventario de Fichas</h1>
+    <p>AVIAM · Punta Cana International Airport</p>
+    <span class="config-link" onclick="toggleCfg()">⚙ Configurar Firebase</span>
+    <div id="fb-box">
+      <p class="hint" style="margin-bottom:.5rem;">Pega las líneas de tu <b>firebaseConfig</b>:</p>
+      <textarea id="inp-cfg" placeholder='apiKey: "...",&#10;authDomain: "...",&#10;projectId: "...",&#10;storageBucket: "...",&#10;messagingSenderId: "...",&#10;appId: "..."'></textarea>
+      <button class="btn-cfg" onclick="saveCfg()">Guardar configuración</button>
+    </div>
+    <button class="btn-enter" onclick="startApp()">Abrir inventario →</button>
+    <p class="hint" style="margin-top:.75rem;">Ambas personas abren esta página y los registros se sincronizan en tiempo real.</p>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo">Fichas <span>AVIAM</span></div>
+    <div class="live"><span class="dot"></span><span id="live-txt">Conectando…</span></div>
+    <div class="hdr-r">
+      <button class="btn-h btn-exp" onclick="exportExcel()">⬇ Exportar Excel</button>
+      <button class="btn-h" onclick="borrarTodo()">🗑 Borrar todo</button>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><span class="v" id="sBC"  style="color:var(--accent)">0</span><span class="l">BC</span></div>
+    <div class="stat"><span class="v" id="sBCB" style="color:var(--teal)">0</span><span class="l">BCB</span></div>
+    <div class="stat"><span class="v" id="sBCTB"style="color:var(--amber)">0</span><span class="l">BCTB</span></div>
+    <div class="stat"><span class="v" id="sVBIP"style="color:var(--purple)">0</span><span class="l">VBIP</span></div>
+    <div class="stat"><span class="v" id="sTOT" style="color:var(--green)">0</span><span class="l">Total</span></div>
+  </div>
+
+  <div class="body">
+    <div class="entry">
+      <div>
+        <h2 style="margin-bottom:.6rem;">Registrar ficha</h2>
+        <input class="big-inp" id="inp-f" placeholder="BC04…" oninput="onInput()" onkeydown="onKey(event)" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <div class="fam-pill" id="pill" style="margin-top:.5rem;">– familia –</div>
+        <div class="dup-warn" id="dup-w">⚠ Ya registrada</div>
+      </div>
+      <button class="btn-reg" id="btn-reg" onclick="registrar()">+ Registrar</button>
+      <div>
+        <h2 style="margin-bottom:.6rem;">Últimos registros</h2>
+        <div class="rec-list" id="rec-list"><div style="color:var(--text2);font-size:12px;">Sin registros aún</div></div>
+      </div>
+    </div>
+
+    <div class="tbl-area">
+      <div class="filters">
+        <input type="text" id="search" placeholder="Buscar…" oninput="render()" />
+        <button class="filt on" id="fTODOS" onclick="setFilt('TODOS')">Todos</button>
+        <button class="filt" id="fBC"   onclick="setFilt('BC')">BC</button>
+        <button class="filt" id="fBCB"  onclick="setFilt('BCB')">BCB</button>
+        <button class="filt" id="fBCTB" onclick="setFilt('BCTB')">BCTB</button>
+        <button class="filt" id="fVBIP" onclick="setFilt('VBIP')">VBIP</button>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-hd">
+          <h3>Fichas registradas</h3>
+          <span class="cnt" id="tbl-cnt">0</span>
+        </div>
+        <div id="tbl-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let db=null, unsub=null, records=[], activeFilt='TODOS';
+const COL='inventario_fichas';
+
+function getCfg(){try{return JSON.parse(localStorage.getItem('fb_cfg')||'null')}catch{return null}}
+
+function toggleCfg(){
+  const b=document.getElementById('fb-box');
+  b.style.display=b.style.display==='none'?'block':'none';
+  const c=getCfg();
+  if(c) document.getElementById('inp-cfg').value=Object.entries(c).map(([k,v])=>`${k}: "${v}"`).join(',\n');
+}
+
+function saveCfg(){
+  const raw=document.getElementById('inp-cfg').value.trim();
+  try{
+    const obj={};
+    raw.split('\n').forEach(l=>{const m=l.match(/^\s*(\w+)\s*:\s*["']?([^"',\n]+?)["']?,?\s*$/);if(m)obj[m[1].trim()]=m[2].trim();});
+    if(!obj.apiKey||!obj.projectId)throw new Error('Faltan campos');
+    localStorage.setItem('fb_cfg',JSON.stringify(obj));
+    toast('Configuración guardada','ok');
+    document.getElementById('fb-box').style.display='none';
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
+function startApp(){
+  const cfg=getCfg();
+  if(!cfg){toast('Primero configura Firebase','err');toggleCfg();return;}
+  try{
+    if(!firebase.apps.length)firebase.initializeApp(cfg);
+    db=firebase.firestore();
+    document.getElementById('setup').style.display='none';
+    document.getElementById('app').style.display='flex';
+    listen();
+  }catch(e){toast('Error Firebase: '+e.message,'err');}
+}
+
+function listen(){
+  if(unsub)unsub();
+  document.getElementById('live-txt').textContent='Conectando…';
+  unsub=db.collection(COL).orderBy('ts','desc').onSnapshot(snap=>{
+    records=snap.docs.map(d=>({id:d.id,...d.data()}));
+    updateStats();render();renderRec();
+    document.getElementById('live-txt').textContent=`En línea · ${records.length} fichas`;
+    onInput();
+  },()=>document.getElementById('live-txt').textContent='⚠ Sin conexión');
+}
+
+function detectFam(raw){
+  const v=raw.trim().toUpperCase().replace(/[-_ ]/g,'');
+  if(v.startsWith('VBIP'))return'VBIP';
+  if(v.startsWith('BCTB'))return'BCTB';
+  if(v.startsWith('BCB'))return'BCB';
+  if(v.startsWith('BC'))return'BC';
+  return null;
+}
+
+function onInput(){
+  const val=document.getElementById('inp-f').value;
+  const fam=detectFam(val);
+  const pill=document.getElementById('pill');
+  pill.className='fam-pill'+(fam?' f'+fam:(val.trim()?' fNONE':''));
+  pill.textContent=fam?'✓ Familia: '+fam:(val.trim()?'No reconocida':'– familia –');
+  const ficha=val.trim().toUpperCase();
+  const dup=ficha&&records.some(r=>r.ficha===ficha);
+  document.getElementById('inp-f').className='big-inp'+(dup?' dup':'');
+  document.getElementById('dup-w').style.display=dup?'block':'none';
+}
+
+function onKey(e){if(e.key==='Enter')registrar();}
+
+async function registrar(){
+  const raw=document.getElementById('inp-f').value;
+  const ficha=raw.trim().toUpperCase();
+  if(!ficha){toast('Escribe el código de la ficha','err');return;}
+  const fam=detectFam(ficha);
+  if(!fam){toast('Familia no reconocida (BC, BCB, BCTB, VBIP)','err');return;}
+  const btn=document.getElementById('btn-reg');
+  btn.disabled=true;
+  try{
+    await db.collection(COL).add({ficha,familia:fam,ts:firebase.firestore.FieldValue.serverTimestamp()});
+    document.getElementById('inp-f').value='';
+    onInput();
+    document.getElementById('inp-f').focus();
+    toast(ficha+' registrada','ok');
+  }catch(e){toast('Error: '+e.message,'err');}
+  btn.disabled=false;
+}
+
+async function eliminar(id,ficha){
+  if(!confirm(`¿Eliminar ficha ${ficha}?`))return;
+  await db.collection(COL).doc(id).delete();
+  toast(ficha+' eliminada','inf');
+}
+
+async function borrarTodo(){
+  if(!records.length){toast('No hay registros','err');return;}
+  if(!confirm(`¿Borrar TODOS los ${records.length} registros? No se puede deshacer.`))return;
+  const batch=db.batch();
+  records.forEach(r=>batch.delete(db.collection(COL).doc(r.id)));
+  await batch.commit();
+  toast('Inventario borrado','inf');
+}
+
+function updateStats(){
+  ['BC','BCB','BCTB','VBIP'].forEach(f=>document.getElementById('s'+f).textContent=records.filter(r=>r.familia===f).length);
+  document.getElementById('sTOT').textContent=records.length;
+}
+
+function setFilt(f){
+  activeFilt=f;
+  document.querySelectorAll('.filt').forEach(b=>b.classList.remove('on'));
+  document.getElementById('f'+f).classList.add('on');
+  render();
+}
+
+function render(){
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  let rows=[...records];
+  if(activeFilt!=='TODOS')rows=rows.filter(r=>r.familia===activeFilt);
+  if(q)rows=rows.filter(r=>r.ficha.toLowerCase().includes(q));
+  document.getElementById('tbl-cnt').textContent=rows.length;
+  if(!rows.length){
+    document.getElementById('tbl-body').innerHTML='<div class="empty"><b>Sin resultados</b>Prueba otro filtro.</div>';
+    return;
+  }
+  document.getElementById('tbl-body').innerHTML=`<table>
+    <thead><tr><th>N°</th><th>Ficha</th><th>Familia</th><th>Registrada</th><th></th></tr></thead>
+    <tbody>${rows.map((r,i)=>{
+      const ts=r.ts?.toDate?r.ts.toDate():new Date();
+      const fmt=ts.toLocaleString('es-DO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return`<tr>
+        <td class="td2">${i+1}</td>
+        <td class="tdf">${r.ficha}</td>
+        <td><span class="tag t${r.familia}">${r.familia}</span></td>
+        <td class="td2">${fmt}</td>
+        <td><button class="btn-del" onclick="eliminar('${r.id}','${r.ficha}')">✕</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function renderRec(){
+  const last=records.slice(0,10);
+  document.getElementById('rec-list').innerHTML=last.length
+    ?last.map(r=>`<div class="rec"><span class="tag t${r.familia}">${r.familia}</span><span class="rc">${r.ficha}</span><button class="btn-dx" onclick="eliminar('${r.id}','${r.ficha}')" title="Eliminar">✕</button></div>`).join('')
+    :'<div style="color:var(--text2);font-size:12px;">Sin registros aún</div>';
+}
+
+function exportExcel(){
+  if(!records.length){toast('No hay datos','err');return;}
+  const wb=XLSX.utils.book_new();
+
+  // Todos los registros
+  const all=records.map((r,i)=>{
+    const ts=r.ts?.toDate?r.ts.toDate():new Date();
+    return{'N°':i+1,'FICHA':r.ficha,'FAMILIA':r.familia,
+      'FECHA':ts.toLocaleDateString('es-DO'),
+      'HORA':ts.toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'})};
+  });
+  const ws=XLSX.utils.json_to_sheet(all);
+  ws['!cols']=[{wch:5},{wch:12},{wch:8},{wch:12},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws,'REGISTROS');
+
+  // Resumen
+  const fams=['BC','BCB','BCTB','VBIP'];
+  const res=fams.map(f=>({'FAMILIA':f,'CANTIDAD':records.filter(r=>r.familia===f).length}));
+  res.push({'FAMILIA':'TOTAL GENERAL','CANTIDAD':records.length});
+  const ws2=XLSX.utils.json_to_sheet(res);
+  ws2['!cols']=[{wch:15},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws2,'RESUMEN');
+
+  // Una hoja por familia
+  fams.forEach(f=>{
+    const fr=records.filter(r=>r.familia===f).map((r,i)=>({'N°':i+1,'FICHA':r.ficha}));
+    if(fr.length){const wsf=XLSX.utils.json_to_sheet(fr);wsf['!cols']=[{wch:5},{wch:12}];XLSX.utils.book_append_sheet(wb,wsf,f);}
+  });
+
+  const d=new Date();
+  XLSX.writeFile(wb,`Inventario_Fichas_PUJ_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.xlsx`);
+  toast('Excel exportado','ok');
+}
+
+function toast(msg,type='inf'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show '+type;
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2800);
+}
+</script>
+</body>
+</html>
